@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+import json
+import os
 from abc import abstractmethod
 
 import torch
@@ -23,6 +25,74 @@ from vllm.model_executor.layers.quantization.base_config import (
 
 logger = init_logger(__name__)
 
+
+# Set these variables directly to enable logging
+# _log_file: file handle (None to disable logging)
+# _target_layer: single layer ID to log (only this layer will be logged)
+log_file = None
+target_layer = 0
+
+def log_moe(
+    layer_id: int,
+    topk_weights: torch.Tensor,
+    topk_ids: torch.Tensor,
+    num_tokens: int,
+) -> None:
+    """
+    Minimal flag-gated logger for MoE routing.
+    
+    set log_file to a file handle and target_layer to the desired layer ID
+    ^ TODO:we will eventually parse these values from the command line arguments
+    """
+    global log_file, target_layer
+    
+    # Early return if logging disabled or wrong layer
+    # for now, we call the logger for every layer but it only logs for the target layer
+    # each transformer layer with a MoE block calls log_moe() during forward pass
+    if log_file is None or layer_id != target_layer:
+        return
+    
+    # top_k: the number of experts selected per token, we can get this from either weights or ids
+    top_k = topk_ids.shape[1]
+    
+    try:
+        # get meta data mentioned in the email
+        #TODO: think of what other metadata might be relevant here
+        from vllm import __version__ as vllm_version
+        model_id = "Qwen/Qwen1.5-MoE-A2.7B-Chat" # model given in the problem statement
+        torch_version = torch.__version__
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        header = {
+            "type": "meta",
+            "model_id": model_id,
+            "vllm_version": vllm_version,
+            "torch_version": torch_version,
+            "device": device,
+            "seed": 1024, #seed value for metadata - given in the problem statement
+            "layers_logged": [layer_id],
+            "top_k": top_k,
+        }
+        _log_file.write(json.dumps(header) + "\n")
+    except Exception:
+        pass
+    
+    # Convert to CPU and log per token & to iterate over them for JSON logging
+    topk_weights_cpu = topk_weights.cpu().tolist()
+    topk_ids_cpu = topk_ids.cpu().tolist()
+    
+    for token_idx in range(num_tokens): #Per-token record (one line per token per logged layer)
+        record = {
+            "type": "route",
+            "req_id": "r1", #hard coded for now -> TODO: check this? i dont think we have request id at this level?
+            "token_idx": token_idx, #represents position within the current batch of tokens
+            "layer": layer_id,
+            "topk_ids": topk_ids_cpu[token_idx],
+            "topk_weights": topk_weights_cpu[token_idx],
+        }
+        _log_file.write(json.dumps(record) + "\n")
+    
+    _log_file.flush()
 
 class FusedMoEMethodBase(QuantizeMethodBase):
     def __init__(self, moe: FusedMoEConfig):

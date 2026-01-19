@@ -19,6 +19,9 @@ from vllm.model_executor.layers.fused_moe.modular_kernel import (
 from vllm.model_executor.layers.fused_moe.router.fused_moe_router import (
     FusedMoERouter,
 )
+from vllm.model_executor.layers.fused_moe.fused_moe_method_base import (
+    log_moe,
+)
 
 logger = init_logger(__name__)
 
@@ -101,6 +104,13 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
         topk_weights, topk_ids = router.select_experts(
             hidden_states=x,
             router_logits=router_logits,
+        )
+
+        log_moe(
+            layer_id=layer.layer_id,
+            topk_weights=topk_weights,
+            topk_ids=topk_ids,
+            num_tokens=x.shape[0], #[num_tokens, hidden_size (embedding dimension)]
         )
 
         result = self.fused_experts(

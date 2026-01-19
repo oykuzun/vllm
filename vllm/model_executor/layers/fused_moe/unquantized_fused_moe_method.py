@@ -34,6 +34,9 @@ from vllm.model_executor.layers.fused_moe.oracle.unquantized import (
 from vllm.model_executor.layers.fused_moe.router.fused_moe_router import (
     FusedMoERouter,
 )
+from vllm.model_executor.layers.fused_moe.fused_moe_method_base import (
+    log_moe,
+)
 from vllm.model_executor.utils import replace_parameter, set_weight_attrs
 from vllm.platforms import current_platform
 from vllm.platforms.interface import CpuArchEnum
@@ -288,6 +291,17 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, CustomOp):
         topk_weights, topk_ids = router.select_experts(
             hidden_states=x,
             router_logits=router_logits,
+        )
+
+        #can log the states asked for in the problem statement here 
+        #since we have access to all required variables for logging - {layer, token_idx, topk_ids, topk_weights?}
+        #I assume token_idx refers to the position within the current batch of tokens
+        #layer_id is the layer number in the model which is configurable -> represents which transformer layer the MoE block belongs to
+        log_moe(
+            layer_id=layer.layer_id,
+            topk_weights=topk_weights,
+            topk_ids=topk_ids,
+            num_tokens=x.shape[0], #used to iterate over the tokens in the batch to log token_idx
         )
 
         result = self.kernel(
