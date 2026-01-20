@@ -1,0 +1,6 @@
+{"type": "meta", "model_id": "Qwen/Qwen1.5-MoE-A2.7B-Chat", "vllm_version": "0.14.0-dev", "torch_version": "2.4.0", "device": "cpu", "seed": 1024, "layers_logged": [0], "top_k": 4}
+{"type": "route", "req_id": "r1", "token_idx": 0, "layer": 0, "topk_ids": [5, 12, 44, 2], "topk_weights": [0.45, 0.25, 0.20, 0.10]}
+{"type": "route", "req_id": "r1", "token_idx": 1, "layer": 0, "topk_ids": [5, 18, 12, 44], "topk_weights": [0.38, 0.32, 0.15, 0.15]}
+{"type": "route", "req_id": "r1", "token_idx": 2, "layer": 0, "topk_ids": [21, 5, 8, 12], "topk_weights": [0.55, 0.20, 0.15, 0.10]}
+{"type": "route", "req_id": "r1", "token_idx": 3, "layer": 0, "topk_ids": [12, 44, 5, 33], "topk_weights": [0.40, 0.30, 0.20, 0.10]}
+{"type": "route", "req_id": "r1", "token_idx": 4, "layer": 0, "topk_ids": [5, 12, 60, 44], "topk_weights": [0.50, 0.25, 0.15, 0.10]}

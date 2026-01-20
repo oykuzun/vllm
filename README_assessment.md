@@ -15,6 +15,7 @@ run with no logging: python3 run_generate.py
 run with logging: export VLLM_LOG_MOE="moe_routes.jsonl"
                   export VLLM_LOG_MOE_LAYER="0"
                   python3 run_generate.py
+histogram generation: python plot_script.py
 
 
 -> Results Analysis - tried running various other smaller MoE models along with Qwen/Qwen1.5-MoE-A2.7B-Chat to get some sort of an output but was unable to run due to memory constraints...
@@ -33,9 +34,14 @@ run with logging: export VLLM_LOG_MOE="moe_routes.jsonl"
     - Load Balancing Loss = alpha * N * sum(f_i * p_i) - loss used during training to encourage uniform routing: can be used to reason further, how well the training loss held up
     - Expert utilization: The percentage of total available experts that were called at least once during the 25-prompt GSM8K run. If utilization is low, model looks like it is wasting parameters
 
+example dummy metrics-> Entropy: 2.7610, CV: 3.2435, Utilization: 14.06%
+    - for 64 experts (Qwen/Qwen1.5-MoE-A2.7B-Chat) : perfect uniform dist is log2(64) = 6, we have 2.76 - means biased router, it is acting like it has 2^2.76 !~ 6.7 active experts only!
+    - perfectly balanced MoE has CV = 0, we have 3.2 - imbalanced load distribution - can cause computatinal bottlenecks, hand in hand with entropy
+    - 14% utilization: almost 85% of the model's knowledge has been consulted - could be because prompts have similar structure.
 
-->AI usage log: tools used and how you verified output.
+--->  AI usage log: tools used and how you verified output.
 - Gemini was used for prompt generation logic/loading from the data set - verified by observing the output file
 - Gemini was used to explore the large repository and to get recommendations on where to hook the requested logic. Verified by looking at the options given and observing the context around them personally.
 - ChatGPT was used to come up with the sample script (test_vllm.py) to check environment setup
 - Gemini was used to troubleshoot runtime errors when I was trying to troubleshoot the vLLM build/model loading tweaks to optimize for the platform being used: The AI helped identify that device="cpu" is deprecated in the newest EngineArgs and suggested environment variables (VLLM_USE_V1=0) to bypass the broken experimental core
+- Gemini was used to come up with plot_script.py file to parse plot_moe_results.py
