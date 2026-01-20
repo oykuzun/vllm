@@ -26,11 +26,20 @@ from vllm.model_executor.layers.quantization.base_config import (
 logger = init_logger(__name__)
 
 
-# Set these variables directly to enable logging
-# _log_file: file handle (None to disable logging)
-# _target_layer: single layer ID to log (only this layer will be logged)
+# Initialize MoE logging from environment variables
+# VLLM_LOG_MOE: path to log file - moe_routes.jsonl
+# VLLM_LOG_MOE_LAYER: layer ID to log (default is 0)
 log_file = None
-target_layer = 0
+if os.getenv("VLLM_LOG_MOE"):
+    try:
+        log_file = open(os.getenv("VLLM_LOG_MOE"), "a")
+    except Exception:
+        pass
+
+try:
+    target_layer = int(os.getenv("VLLM_LOG_MOE_LAYER", "0"))
+except ValueError:
+    target_layer = 0
 
 def log_moe(
     layer_id: int,
@@ -40,9 +49,6 @@ def log_moe(
 ) -> None:
     """
     Minimal flag-gated logger for MoE routing.
-    
-    set log_file to a file handle and target_layer to the desired layer ID
-    ^ TODO:we will eventually parse these values from the command line arguments
     """
     global log_file, target_layer
     
@@ -73,7 +79,7 @@ def log_moe(
             "layers_logged": [layer_id],
             "top_k": top_k,
         }
-        _log_file.write(json.dumps(header) + "\n")
+        log_file.write(json.dumps(header) + "\n")
     except Exception:
         pass
     
@@ -90,9 +96,9 @@ def log_moe(
             "topk_ids": topk_ids_cpu[token_idx],
             "topk_weights": topk_weights_cpu[token_idx],
         }
-        _log_file.write(json.dumps(record) + "\n")
+        log_file.write(json.dumps(record) + "\n")
     
-    _log_file.flush()
+    log_file.flush()
 
 class FusedMoEMethodBase(QuantizeMethodBase):
     def __init__(self, moe: FusedMoEConfig):
