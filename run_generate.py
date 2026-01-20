@@ -17,7 +17,8 @@ def run_without_logging():
     sp = SamplingParams(temperature=TEMPERATURE, max_tokens=MAX_NEW_TOKENS)
     llm = LLM(
         model="Qwen/Qwen1.5-MoE-A2.7B-Chat",
-        quantization="gptq", #quantize to fit into memory
+        #model="ibm-granite/granite-3.0-3b-a800m-instruct",
+        quantization="gptq", #tried awq as well
         enforce_eager=True,
         max_model_len=512,
         gpu_memory_utilization=0.6 #from 0.8
