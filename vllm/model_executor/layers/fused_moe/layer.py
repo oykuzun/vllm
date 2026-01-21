@@ -1531,6 +1531,7 @@ class FusedMoE(CustomOp):
         hidden_states: torch.Tensor,
         router_logits: torch.Tensor,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        # logger.info(f"DEBUG_OU FusedMoE.forward_native called for layer {self.layer_id}")
         og_hidden_states = hidden_states.shape[-1]
         if self.hidden_size != og_hidden_states:
             hidden_states = F.pad(
@@ -1555,9 +1556,11 @@ class FusedMoE(CustomOp):
                 # TODO: Once the OOM issue for the TPU backend is resolved, we
                 # will switch to using the moe_forward custom op.
                 # Note: CPU doesn't require wrapped forward_impl.
+                # logger.info(f"DEBUG_OU Using forward_impl (TPU/CPU path) for layer {self.layer_id}")
                 fused_output = self.forward_impl(hidden_states, router_logits)
                 assert not isinstance(fused_output, tuple)
             else:
+                # logger.info(f"DEBUG_OU Using torch.ops.vllm.moe_forward (CUDA compiled op) for layer {self.layer_id}")
                 fused_output = torch.ops.vllm.moe_forward(
                     hidden_states, router_logits, self.layer_name
                 )
@@ -1590,6 +1593,7 @@ class FusedMoE(CustomOp):
         hidden_states: torch.Tensor,
         router_logits: torch.Tensor,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        # logger.info(f"DEBUG_OU FusedMoE.forward_cuda called for layer {self.layer_id}")
         return self.forward_native(hidden_states, router_logits)
 
     def forward_impl_chunked(
@@ -1819,6 +1823,7 @@ class FusedMoE(CustomOp):
                 )
 
             # Matrix multiply.
+            # logger.info(f" DEBUG_OU FusedMoE.forward_impl calling quant_method.apply, quant_method type: {type(self.quant_method).__name__}, layer_id: {self.layer_id}")
             final_hidden_states = self.quant_method.apply(
                 layer=self,
                 router=self.router,
@@ -1935,8 +1940,11 @@ def moe_forward(
 ) -> torch.Tensor:
     forward_context: ForwardContext = get_forward_context()
     self = forward_context.no_compile_layers[layer_name]
+    # logger.info(f"DEBUG_OU moe_forward wrapper called for layer_name={layer_name}, layer_id={self.layer_id}")
     assert self.shared_experts is None
-    return self.forward_impl(hidden_states, router_logits)
+    result = self.forward_impl(hidden_states, router_logits)
+    # logger.info(f"DEBUG_OU moe_forward wrapper returning from forward_impl for layer {self.layer_id}")
+    return result
 
 
 def moe_forward_fake(

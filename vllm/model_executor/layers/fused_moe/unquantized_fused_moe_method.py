@@ -263,6 +263,7 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, CustomOp):
         x: torch.Tensor,
         router_logits: torch.Tensor,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        # logger.info(f"DEBUG_OU UnquantizedFusedMoEMethod.apply called for layer {layer.layer_id}")
         return self.forward(
             router=router,
             layer=layer,
@@ -297,6 +298,7 @@ class UnquantizedFusedMoEMethod(FusedMoEMethodBase, CustomOp):
         #since we have access to all required variables for logging - {layer, token_idx, topk_ids, topk_weights?}
         #I assume token_idx refers to the position within the current batch of tokens
         #layer_id is the layer number in the model which is configurable -> represents which transformer layer the MoE block belongs to
+        # logger.info(f" DEBUG_OU log_moe (UNQUANTIZED) called for layer {layer.layer_id}")
         log_moe(
             layer_id=layer.layer_id,
             topk_weights=topk_weights,

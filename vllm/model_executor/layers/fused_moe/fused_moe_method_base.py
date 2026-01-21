@@ -50,7 +50,29 @@ def log_moe(
     """
     Minimal flag-gated logger for MoE routing.
     """
+    # logger.debug(f DEBUG_OU log_moe called for layer {layer_id}")
     global log_file, target_layer
+    
+    # Check environment variables dynamically if log_file is not initialized
+    # This allows setting env vars after module import
+    if log_file is None:
+        log_path = os.getenv("VLLM_LOG_MOE")
+        if log_path:
+            try:
+                # Use absolute path to avoid issues with working directory
+                if not os.path.isabs(log_path):
+                    log_path = os.path.abspath(log_path)
+                log_file = open(log_path, "a")
+                logger.info(f"MoE logging enabled: writing to {log_path}")
+            except Exception as e:
+                logger.warning(f"Failed to open MoE log file {log_path}: {e}")
+                pass
+    
+    # Update target_layer from env var if needed (allows dynamic changes)
+    try:
+        target_layer = int(os.getenv("VLLM_LOG_MOE_LAYER", str(target_layer)))
+    except ValueError:
+        pass
     
     # Early return if logging disabled or wrong layer
     # for now, we call the logger for every layer but it only logs for the target layer
@@ -80,7 +102,9 @@ def log_moe(
             "top_k": top_k,
         }
         log_file.write(json.dumps(header) + "\n")
-    except Exception:
+        log_file.flush()
+    except Exception as e:
+        logger.warning(f"Failed to write MoE log header: {e}")
         pass
     
     # Convert to CPU and log per token & to iterate over them for JSON logging
@@ -98,7 +122,10 @@ def log_moe(
         }
         log_file.write(json.dumps(record) + "\n")
     
-    log_file.flush()
+    try:
+        log_file.flush()
+    except Exception as e:
+        logger.warning(f"Failed to flush MoE log file: {e}")
 
 class FusedMoEMethodBase(QuantizeMethodBase):
     def __init__(self, moe: FusedMoEConfig):

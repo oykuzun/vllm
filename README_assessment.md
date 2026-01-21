@@ -10,38 +10,37 @@ One alternative considered for where to add the logger was in router/fused_topk_
     -> this would have required passing layer_id through router interface, adding complexity
 
 -> Commands:
-generate prompts: python3 make_prompts.py
-run with no logging: python3 run_generate.py
-run with logging: export VLLM_LOG_MOE="moe_routes.jsonl"
-                  export VLLM_LOG_MOE_LAYER="0"
-                  python3 run_generate.py
-histogram generation: python plot_script.py
+generate prompts:               python3 make_prompts.py
+run with no logging & logging: 
+                                export VLLM_LOG_MOE_LAYER="0" #run this only if you want to configure the layer, default is layer 0 
+                                python3 run_generate.py
+
+histogram generation:           python plot_script.py
 
 
--> Results Analysis - tried running various other smaller MoE models along with Qwen/Qwen1.5-MoE-A2.7B-Chat to get some sort of an output but was unable to run due to memory constraints...
-                    - I tried running on a NVIDIA GeForce RTX 2080 Ti GPU through UWaterloo servers as well as the Intel(R) Xeon(R) Silver 4114 CPU
-                      but when loading weights of the model, the program kept throwing: RuntimeError: Engine core initialization failed.
-                      I tried different quantization methods, running on Google Colab, on my local machine, setting 
-(a) Top-3 Experts: n/a 
-    - Typically, in MoE models, a few experts become "specialists" for common tokens, we would have been able to detect these from the histogram
+-> Results Analysis - running the modified vLLM on two NVIDIA RTX A4500 GPUs (20 GB VRAM each) gave these results:
+(a) Top-3 Experts: there is a tie between Expert 43, 5, 7, 58 for the first 25 primpts of the GSM8K dataset.
+    - Typically, in MoE models, a few experts become "specialists" for common tokens, and these dominating experts show a consistent routing pattern
 
-(b) Normalized Distribution: n/a
+(b) Normalized Distribution: top 4 experts account for ~25% of all expert selections, while the rest of 60 share only ~0.8%
 
-(c) Metrics: 
+(c) Metrics (on real data) -> Entropy: 2.0791, CV: 3.8410, Expert Utilization: 28.12%
     - Entropy: Entropy measures the uncertainty/diversity in expert selection. Higher entropy = more diverse routing (experts used more evenly), lower entropy = more concentrated routing (few experts dominate - expert collapse). 
         Formula: H = -sum(p_i * log_2(p_i)) where p_i is the probability of expert i being selected.
-    - Coefficient of variation (std/mean): can be used to measure load balancing across various experts - 0: perfect load balancing, high CV : biased router
-    - Load Balancing Loss = alpha * N * sum(f_i * p_i) - loss used during training to encourage uniform routing: can be used to reason further, how well the training loss held up
+        *perfect uniform dist is log2(64) = 6, we have 2.08 -> biased router! It is acting like it has 2^2.08 !~ 4.22 active experts only!
+    - Coefficient of variation (std/mean): can be used to measure load balancing across various experts - 0: perfect load balancing, high CV -> biased router
+        *perfectly balanced MoE has CV = 0, we have 3.84 - imbalanced load distribution - can cause computatinal bottlenecks, hand in hand with entropy
     - Expert utilization: The percentage of total available experts that were called at least once during the 25-prompt GSM8K run. If utilization is low, model looks like it is wasting parameters
+        *28.12% util : almost 70% of the model's knowledge has been consulted - could be because prompts have similar structure.
+    - Load Balancing Loss = alpha * N * sum(f_i * p_i) - loss used during training to encourage uniform routing: can be used to reason further, how well the training loss held up
 
-example dummy metrics-> Entropy: 2.7610, CV: 3.2435, Utilization: 14.06%
-    - for 64 experts (Qwen/Qwen1.5-MoE-A2.7B-Chat) : perfect uniform dist is log2(64) = 6, we have 2.76 - means biased router, it is acting like it has 2^2.76 !~ 6.7 active experts only!
-    - perfectly balanced MoE has CV = 0, we have 3.2 - imbalanced load distribution - can cause computatinal bottlenecks, hand in hand with entropy
-    - 14% utilization: almost 85% of the model's knowledge has been consulted - could be because prompts have similar structure.
+TODO:
+- timing for logging and no logging are not the same, debug further.
+-printing the metadata in moe_routed.jsonl more than once, to be fixed.
 
 --->  AI usage log: tools used and how you verified output.
 - Gemini was used for prompt generation logic/loading from the data set - verified by observing the output file
 - Gemini was used to explore the large repository and to get recommendations on where to hook the requested logic. Verified by looking at the options given and observing the context around them personally.
 - ChatGPT was used to come up with the sample script (test_vllm.py) to check environment setup
-- Gemini was used to troubleshoot runtime errors when I was trying to troubleshoot the vLLM build/model loading tweaks to optimize for the platform being used: The AI helped identify that device="cpu" is deprecated in the newest EngineArgs and suggested environment variables (VLLM_USE_V1=0) to bypass the broken experimental core
-- Gemini was used to come up with plot_script.py file to parse plot_moe_results.py
+- Gemini was used to troubleshoot runtime errors when I was trying to troubleshoot the vLLM build/model loading tweaks to optimize for the platform being used
+- ChatGPT and Gemini were used to assist with reasoning about vLLM configuration parameters and GPU memory trade-offs. Suggested parameters were manually evaluated and refined through empirical testing. Output correctness was verified by comparing token counts and generated outputs across runs, and performance was validated via timed measurements with fixed seeds and generation settings.

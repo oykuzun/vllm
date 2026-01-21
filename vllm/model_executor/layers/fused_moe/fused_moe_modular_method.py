@@ -101,11 +101,13 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
         x: torch.Tensor,
         router_logits: torch.Tensor,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        # logger.info(f"DEBUG_OU FusedMoEModularMethod.apply called for layer {layer.layer_id}")
         topk_weights, topk_ids = router.select_experts(
             hidden_states=x,
             router_logits=router_logits,
         )
 
+        # logger.info(f"DEBUG_OU log_moe called for layer {layer.layer_id}")
         log_moe(
             layer_id=layer.layer_id,
             topk_weights=topk_weights,
