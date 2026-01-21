@@ -47,22 +47,28 @@ def run_without_logging():
         swap_space=8,
     )
 
-    t0 = time.time()
-    outs = llm.generate(prompts, sp)
-    t1 = time.time()
-    
-    timing_data = {
-        "no_log": {
-            "time_taken": t1 - t0,
-            "tokens_generated": sum(len(o.outputs[0].token_ids) for o in outs)
+    try:
+        t0 = time.time()
+        outs = llm.generate(prompts, sp)
+        t1 = time.time()
+        
+        timing_data = {
+            "no_log": {
+                "time_taken": t1 - t0,
+                "tokens_generated": sum(len(o.outputs[0].token_ids) for o in outs)
+            }
         }
-    }
-    
-    # Save initial timing data
-    with open("timing.json", "w") as f:
-        json.dump(timing_data, f, indent=2)
-   
-    return timing_data
+        
+        # Save initial timing data
+        with open("timing.json", "w") as f:
+            json.dump(timing_data, f, indent=2)
+       
+        return timing_data
+    finally:
+        # Properly cleanup the LLM object to release shared memory
+        del llm
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 def run_with_logging():
@@ -87,37 +93,43 @@ def run_with_logging():
         swap_space=8,
     )
 
-    t0 = time.time()
-    outs = llm.generate(prompts, sp)
-    t1 = time.time()
-    
-    timing_data_with_log = {
-        "log": {
-            "time_taken": t1 - t0,
-            "tokens_generated": sum(len(o.outputs[0].token_ids) for o in outs)
+    try:
+        t0 = time.time()
+        outs = llm.generate(prompts, sp)
+        t1 = time.time()
+        
+        timing_data_with_log = {
+            "log": {
+                "time_taken": t1 - t0,
+                "tokens_generated": sum(len(o.outputs[0].token_ids) for o in outs)
+            }
         }
-    }
-    
-    
-    with open("timing.json", "r") as f:
-        timing_data = json.load(f) #read the old timing data with logging disabled
-    
-    # Merge the log timing data with the old timing data
-    timing_data.update(timing_data_with_log)
-    
-    # Save updated timing data
-    with open("timing.json", "w") as f:
-        json.dump(timing_data, f, indent=2)
-    
-    # observe the diff - should be the same
-    if "no_log" in timing_data and "log" in timing_data:
-        no_log_time = timing_data["no_log"]["time_taken"]
-        log_time = timing_data["log"]["time_taken"]
-        print(f"   No logging: {no_log_time:.2f}s")
-        print(f"   With logging: {log_time:.2f}s")
-    
-    
-    return timing_data
+        
+        
+        with open("timing.json", "r") as f:
+            timing_data = json.load(f) #read the old timing data with logging disabled
+        
+        # Merge the log timing data with the old timing data
+        timing_data.update(timing_data_with_log)
+        
+        # Save updated timing data
+        with open("timing.json", "w") as f:
+            json.dump(timing_data, f, indent=2)
+        
+        # observe the diff - should be the same
+        if "no_log" in timing_data and "log" in timing_data:
+            no_log_time = timing_data["no_log"]["time_taken"]
+            log_time = timing_data["log"]["time_taken"]
+            print(f"   No logging: {no_log_time:.2f}s")
+            print(f"   With logging: {log_time:.2f}s")
+        
+        
+        return timing_data
+    finally:
+        # Properly cleanup the LLM object to release shared memory
+        del llm
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 def main():
