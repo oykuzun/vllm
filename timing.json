@@ -1,10 +1,10 @@
 {
   "no_log": {
-    "time_taken": 16.265182495117188,
-    "tokens_generated": 2874
+    "time_taken": 62.04148054122925,
+    "tokens_generated": 2897
   },
   "log": {
-    "time_taken": 65.18431115150452,
+    "time_taken": 63.88207006454468,
     "tokens_generated": 2897
   }
 }

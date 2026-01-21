@@ -3,6 +3,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import os, json, time, random, torch, gc
 import subprocess
 import glob
+import argparse
+import sys
+import argparse
 
 # Fixed generation parameters given in the problem statement
 SEED = 1234
@@ -40,7 +43,7 @@ def run_without_logging():
         model="Qwen/Qwen1.5-MoE-A2.7B-Chat",
         tensor_parallel_size=2,
         dtype="float16",
-        enforce_eager=False,
+        enforce_eager=True,
         max_model_len=256, #make kv cache even smaller
         max_num_seqs=1,
         gpu_memory_utilization=0.80,
@@ -133,9 +136,23 @@ def run_with_logging():
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "mode",
+        default="no_log",
+        choices=["log", "no_log"],
+    )
     
-    timing_data = run_with_logging()
-
+    args = parser.parse_args()
+    
+    if args.mode == "log":
+        print("Running with MoE logging")
+        timing_data = run_with_logging()
+    else:
+        print("Running without MoE logging.")
+        timing_data = run_without_logging()
+    
+    return timing_data
 
 
 if __name__ == "__main__":
