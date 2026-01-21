@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+import fcntl
 import json
 import os
 from abc import abstractmethod
@@ -30,6 +31,7 @@ logger = init_logger(__name__)
 # VLLM_LOG_MOE: path to log file - moe_routes.jsonl
 # VLLM_LOG_MOE_LAYER: layer ID to log (default is 0)
 log_file = None
+metadata_written = False  # Track if metadata has been written to avoid duplicates
 if os.getenv("VLLM_LOG_MOE"):
     try:
         log_file = open(os.getenv("VLLM_LOG_MOE"), "a")
@@ -51,7 +53,7 @@ def log_moe(
     Minimal flag-gated logger for MoE routing.
     """
     # logger.debug(f DEBUG_OU log_moe called for layer {layer_id}")
-    global log_file, target_layer
+    global log_file, target_layer, metadata_written
     
     # Check environment variables dynamically if log_file is not initialized
     # This allows setting env vars after module import
@@ -62,6 +64,24 @@ def log_moe(
                 # Use absolute path to avoid issues with working directory
                 if not os.path.isabs(log_path):
                     log_path = os.path.abspath(log_path)
+                # Check if file exists and is empty to determine if we should write metadata
+                file_exists = os.path.exists(log_path)
+                file_empty = file_exists and os.path.getsize(log_path) == 0
+                
+                # If file exists and is not empty, check if metadata already exists
+                if file_exists and not file_empty:
+                    try:
+                        with open(log_path, "r") as f:
+                            first_line = f.readline().strip()
+                            if first_line and json.loads(first_line).get("type") == "meta":
+                                metadata_written = True  # Metadata already exists
+                    except Exception:
+                        # If we can't read/parse, assume we need to write metadata
+                        metadata_written = False
+                else:
+                    # File is empty or doesn't exist, we'll write metadata
+                    metadata_written = False
+                
                 log_file = open(log_path, "a")
                 logger.info(f"MoE logging enabled: writing to {log_path}")
             except Exception as e:
@@ -83,29 +103,58 @@ def log_moe(
     # top_k: the number of experts selected per token, we can get this from either weights or ids
     top_k = topk_ids.shape[1]
     
-    try:
-        # get meta data mentioned in the email
-        #TODO: think of what other metadata might be relevant here
-        from vllm import __version__ as vllm_version
-        model_id = "Qwen/Qwen1.5-MoE-A2.7B-Chat" # model given in the problem statement
-        torch_version = torch.__version__
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-        header = {
-            "type": "meta",
-            "model_id": model_id,
-            "vllm_version": vllm_version,
-            "torch_version": torch_version,
-            "device": device,
-            "seed": 1024, #seed value for metadata - given in the problem statement
-            "layers_logged": [layer_id],
-            "top_k": top_k,
-        }
-        log_file.write(json.dumps(header) + "\n")
-        log_file.flush()
-    except Exception as e:
-        logger.warning(f"Failed to write MoE log header: {e}")
-        pass
+    # Write metadata only once at the start of logging
+    if not metadata_written:
+        try:
+            # Acquire exclusive lock to ensure only one process writes metadata (since we run on 2 GPUs)
+            fcntl.flock(log_file.fileno(), fcntl.LOCK_EX)
+            try:
+                # Double-check: re-read file to see if another process wrote metadata
+                log_path = log_file.name
+                file_has_metadata = False
+                if os.path.exists(log_path) and os.path.getsize(log_path) > 0:
+                    # Read first line to check if metadata exists
+                    with open(log_path, "r") as check_file:
+                        first_line = check_file.readline().strip()
+                        if first_line:
+                            try:
+                                first_record = json.loads(first_line)
+                                if first_record.get("type") == "meta":
+                                    file_has_metadata = True
+                            except (json.JSONDecodeError, KeyError):
+                                pass  # File exists but first line isn't metadata, continue
+                
+                # If metadata already exists in file, mark as written and skip
+                if file_has_metadata:
+                    metadata_written = True
+                else:
+                    # We need to write metadata (we hold the lock, so we're the only one)
+                    # get meta data mentioned in the email
+                    #TODO: think of what other metadata might be relevant here
+                    from vllm import __version__ as vllm_version
+                    model_id = "Qwen/Qwen1.5-MoE-A2.7B-Chat" # model given in the problem statement
+                    torch_version = torch.__version__
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                    
+                    header = {
+                        "type": "meta",
+                        "model_id": model_id,
+                        "vllm_version": vllm_version,
+                        "torch_version": torch_version,
+                        "device": device,
+                        "seed": 1024, #seed value for metadata - given in the problem statement
+                        "layers_logged": [layer_id],
+                        "top_k": top_k,
+                    }
+                    log_file.write(json.dumps(header) + "\n")
+                    log_file.flush()
+                    metadata_written = True  # Mark metadata as written
+            finally:
+                # Always release the lock
+                fcntl.flock(log_file.fileno(), fcntl.LOCK_UN)
+        except Exception as e:
+            logger.warning(f"Failed to write MoE log header: {e}")
+            pass
     
     # Convert to CPU and log per token & to iterate over them for JSON logging
     topk_weights_cpu = topk_weights.cpu().tolist()
